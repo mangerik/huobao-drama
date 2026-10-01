@@ -42,6 +42,10 @@ function geminiHeaders(apiKey?: string, withJson = false) {
   return headers
 }
 
+function isKieProvider(provider: string) {
+  return String(provider || '').toLowerCase() === 'kie'
+}
+
 function buildProbe(serviceType: string, provider: string, baseUrl: string, model?: string, apiKey?: string) {
   const p = provider.toLowerCase()
   const m = model || ''
@@ -91,6 +95,16 @@ function buildProbe(serviceType: string, provider: string, baseUrl: string, mode
       url: joinProviderUrl(baseUrl, '/v2', '/video_generation'),
       headers: bearerHeaders(apiKey, true),
       body: {},
+    }
+  }
+
+  if (p === 'kie') {
+    // kie.ai 查询账户积分：只读、不计费，可同时验证连通性与 Bearer 鉴权
+    return {
+      method: 'GET',
+      url: joinProviderUrl(baseUrl, '/api/v1', '/chat/credit'),
+      headers: bearerHeaders(apiKey),
+      body: undefined,
     }
   }
 
@@ -196,14 +210,24 @@ app.post('/test', async (c) => {
     })
     const text = await resp.text()
     const reachable = [200, 204, 400, 401, 403].includes(resp.status)
+    // kie.ai 业务错误走 HTTP 200 + JSON code 字段（如 401 鉴权失败），需从响应体判定
+    let kieAuthFailed = false
+    if (isKieProvider(body.provider) && resp.ok) {
+      try {
+        const code = JSON.parse(text)?.code
+        kieAuthFailed = code !== undefined && Number(code) !== 200
+      } catch {}
+    }
     const payload = {
-      ok: resp.ok,
+      ok: resp.ok && !kieAuthFailed,
       reachable,
       status: resp.status,
       status_text: resp.statusText,
       method: probe.method,
       url: probeUrl,
-      message: reachable
+      message: kieAuthFailed
+        ? 'kie.ai 返回业务错误，请检查 API Key 是否正确'
+        : reachable
         ? (resp.ok ? '端点可访问，认证与路径基本正常' : '端点已响应，请根据状态码判断认证或路径是否正确')
         : '端点未按预期响应，请检查 Base URL 和代理前缀',
       response_preview: text.slice(0, 240),

@@ -40,6 +40,12 @@ export interface ImageProviderAdapter {
    * 仅用于 Gemini 等只返回 base64 的厂商
    */
   extractImageBase64(result: any): { data: string; mimeType: string } | null
+
+  /**
+   * 可选：构建请求前的异步预处理（如把 dataURL 参考图上传为公网 URL）
+   * buildGenerateRequest 是同步的，需要网络 IO 的转换放在这里
+   */
+  prepareRecord?(config: AIConfig, record: ImageGenerationRecord): Promise<ImageGenerationRecord>
 }
 
 /**
@@ -57,6 +63,9 @@ export interface VideoProviderAdapter {
   parsePollResponse(result: any): VideoPollResponse
 
   extractVideoUrl(result: any): string | null
+
+  /** 可选：构建请求前的异步预处理，语义同 ImageProviderAdapter.prepareRecord */
+  prepareRecord?(config: AIConfig, record: VideoGenerationRecord): Promise<VideoGenerationRecord>
 }
 
 // ============ 通用类型 ============
